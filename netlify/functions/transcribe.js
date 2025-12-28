@@ -3,6 +3,8 @@ const FormData = require("form-data");
 const { Readable } = require("stream");
 const fetchImpl = global.fetch || require("node-fetch");
 
+const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
+
 const parseMultipart = (event) =>
   new Promise((resolve, reject) => {
     const headers = Object.fromEntries(
@@ -16,13 +18,24 @@ const parseMultipart = (event) =>
       reject(new Error("Missing Content-Type header."));
       return;
     }
+    if (!contentType.includes("multipart/form-data")) {
+      reject(new Error("Unsupported Content-Type. Please upload a file."));
+      return;
+    }
 
     const busboy = Busboy({ headers: { "content-type": contentType } });
     let fileBuffer = Buffer.alloc(0);
     let filename = "";
     let mimeType = "";
+    const fields = {};
+    let hasFile = false;
 
     busboy.on("file", (_fieldname, file, info) => {
+      if (hasFile) {
+        file.resume();
+        return;
+      }
+      hasFile = true;
       filename = info.filename || "audio";
       mimeType = info.mimeType || "application/octet-stream";
       file.on("data", (data) => {
@@ -30,12 +43,26 @@ const parseMultipart = (event) =>
       });
     });
 
+    busboy.on("field", (fieldname, value) => {
+      if (value) {
+        fields[fieldname] = value;
+      }
+    });
+
     busboy.on("finish", () => {
       if (!fileBuffer.length) {
         reject(new Error("No audio file provided."));
         return;
       }
-      resolve({ fileBuffer, filename, mimeType });
+      if (fileBuffer.length > MAX_AUDIO_BYTES) {
+        reject(
+          new Error(
+            "Audio file is too large. Please upload a file under 25MB."
+          )
+        );
+        return;
+      }
+      resolve({ fileBuffer, filename, mimeType, fields });
     });
 
     busboy.on("error", reject);
@@ -71,7 +98,8 @@ exports.handler = async (event) => {
   }
 
   try {
-    const { fileBuffer, filename, mimeType } = await parseMultipart(event);
+    const { fileBuffer, filename, mimeType, fields } =
+      await parseMultipart(event);
 
     const formData = new FormData();
     formData.append("file", fileBuffer, {
@@ -80,6 +108,12 @@ exports.handler = async (event) => {
       knownLength: fileBuffer.length,
     });
     formData.append("model", "whisper-1");
+    if (fields?.language) {
+      formData.append("language", fields.language);
+    }
+    if (fields?.prompt) {
+      formData.append("prompt", fields.prompt);
+    }
 
     const fetchOptions = {
       method: "POST",
