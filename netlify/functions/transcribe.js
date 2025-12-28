@@ -1,7 +1,9 @@
 const Busboy = require("busboy");
 const FormData = require("form-data");
 const { Readable } = require("stream");
-const fetchImpl = global.fetch || require("node-fetch");
+const fetchImpl = require("node-fetch");
+
+const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 
@@ -123,9 +125,6 @@ exports.handler = async (event) => {
       },
       body: formData,
     };
-    if (fetchImpl === global.fetch) {
-      fetchOptions.duplex = "half";
-    }
 
     const response = await fetchImpl(
       "https://api.openai.com/v1/audio/transcriptions",
