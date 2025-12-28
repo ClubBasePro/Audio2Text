@@ -165,11 +165,12 @@
             method: "POST",
             body: formData,
           });
+          const responseText = await response.text();
           let payload = {};
           try {
-            payload = await response.json();
+            payload = responseText ? JSON.parse(responseText) : {};
           } catch (error) {
-            payload = { error: await response.text() };
+            payload = { error: responseText };
           }
 
           if (!response.ok) {

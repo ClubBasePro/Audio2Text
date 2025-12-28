@@ -4,8 +4,13 @@ const { Readable } = require("stream");
 
 const parseMultipart = (event) =>
   new Promise((resolve, reject) => {
-    const contentType =
-      event.headers["content-type"] || event.headers["Content-Type"];
+    const headers = Object.fromEntries(
+      Object.entries(event.headers || {}).map(([key, value]) => [
+        key.toLowerCase(),
+        value,
+      ])
+    );
+    const contentType = headers["content-type"];
     if (!contentType) {
       reject(new Error("Missing Content-Type header."));
       return;
@@ -34,9 +39,14 @@ const parseMultipart = (event) =>
 
     busboy.on("error", reject);
 
+    if (!event.body) {
+      reject(new Error("Missing request body."));
+      return;
+    }
+
     const body = event.isBase64Encoded
-      ? Buffer.from(event.body || "", "base64")
-      : Buffer.from(event.body || "", "utf8");
+      ? Buffer.from(event.body, "base64")
+      : Buffer.from(event.body, "utf8");
     Readable.from(body).pipe(busboy);
   });
 
@@ -81,13 +91,22 @@ exports.handler = async (event) => {
       }
     );
 
-    const data = await response.json();
+    const responseText = await response.text();
+    let data = {};
+    try {
+      data = responseText ? JSON.parse(responseText) : {};
+    } catch (error) {
+      data = {};
+    }
     if (!response.ok) {
       return {
         statusCode: response.status,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          error: data.error?.message || "Transcription failed.",
+          error:
+            data.error?.message ||
+            responseText ||
+            "Transcription failed.",
         }),
       };
     }
