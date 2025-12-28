@@ -1,6 +1,7 @@
 const Busboy = require("busboy");
 const FormData = require("form-data");
 const { Readable } = require("stream");
+const fetchImpl = global.fetch || require("node-fetch");
 
 const parseMultipart = (event) =>
   new Promise((resolve, reject) => {
@@ -76,19 +77,25 @@ exports.handler = async (event) => {
     formData.append("file", fileBuffer, {
       filename,
       contentType: mimeType,
+      knownLength: fileBuffer.length,
     });
     formData.append("model", "whisper-1");
 
-    const response = await fetch(
+    const fetchOptions = {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        ...formData.getHeaders(),
+      },
+      body: formData,
+    };
+    if (fetchImpl === global.fetch) {
+      fetchOptions.duplex = "half";
+    }
+
+    const response = await fetchImpl(
       "https://api.openai.com/v1/audio/transcriptions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-          ...formData.getHeaders(),
-        },
-        body: formData,
-      }
+      fetchOptions
     );
 
     const responseText = await response.text();
