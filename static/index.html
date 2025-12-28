@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Audio2Text Transcriber</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: "Inter", system-ui, -apple-system, sans-serif;
+      }
+      body {
+        margin: 0;
+        background: #f5f7fb;
+        color: #1f2a37;
+      }
+      main {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 48px 24px 64px;
+      }
+      header {
+        margin-bottom: 32px;
+      }
+      h1 {
+        font-size: 2.25rem;
+        margin: 0 0 12px;
+      }
+      p {
+        margin: 0;
+        color: #556070;
+      }
+      .card {
+        background: #ffffff;
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+      }
+      form {
+        display: grid;
+        gap: 16px;
+      }
+      input[type="file"] {
+        padding: 12px;
+        border: 1px solid #d7dce4;
+        border-radius: 10px;
+        background: #f9fafc;
+      }
+      button {
+        border: none;
+        border-radius: 12px;
+        padding: 12px 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .primary {
+        background: #2563eb;
+        color: white;
+        box-shadow: 0 10px 18px rgba(37, 99, 235, 0.25);
+      }
+      .secondary {
+        background: #eef2ff;
+        color: #1d4ed8;
+      }
+      .primary:hover:not(:disabled),
+      .secondary:hover:not(:disabled) {
+        transform: translateY(-1px);
+      }
+      .output {
+        margin-top: 24px;
+        display: grid;
+        gap: 12px;
+      }
+      textarea {
+        width: 100%;
+        min-height: 220px;
+        border-radius: 12px;
+        border: 1px solid #d7dce4;
+        padding: 12px;
+        font-size: 0.95rem;
+        resize: vertical;
+      }
+      .status {
+        font-size: 0.9rem;
+        color: #475569;
+      }
+      .error {
+        color: #dc2626;
+      }
+      .actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Audio2Text Transcriber</h1>
+        <p>Upload an MP3 (or other supported audio file) and get a transcript you can copy.</p>
+      </header>
+
+      <section class="card">
+        <form id="transcribe-form">
+          <label>
+            <strong>Select audio file</strong>
+            <input
+              id="audio-input"
+              name="audio"
+              type="file"
+              accept="audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/flac,audio/ogg,audio/mp4,audio/x-m4a"
+              required
+            />
+          </label>
+          <div class="actions">
+            <button class="primary" id="transcribe-button" type="submit">Transcribe audio</button>
+            <button class="secondary" id="copy-button" type="button" disabled>Copy transcript</button>
+          </div>
+          <div class="status" id="status"></div>
+        </form>
+
+        <div class="output">
+          <label for="transcript"><strong>Transcript</strong></label>
+          <textarea id="transcript" placeholder="Your transcript will appear here..." readonly></textarea>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const form = document.getElementById("transcribe-form");
+      const audioInput = document.getElementById("audio-input");
+      const statusEl = document.getElementById("status");
+      const transcriptEl = document.getElementById("transcript");
+      const copyButton = document.getElementById("copy-button");
+      const transcribeButton = document.getElementById("transcribe-button");
+
+      const setStatus = (message, isError = false) => {
+        statusEl.textContent = message;
+        statusEl.classList.toggle("error", isError);
+      };
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (!audioInput.files.length) {
+          setStatus("Please choose an audio file to transcribe.", true);
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append("audio", audioInput.files[0]);
+
+        transcriptEl.value = "";
+        setStatus("Uploading audio and generating transcript...");
+        copyButton.disabled = true;
+        transcribeButton.disabled = true;
+
+        try {
+          const response = await fetch("/.netlify/functions/transcribe", {
+            method: "POST",
+            body: formData,
+          });
+          let payload = {};
+          try {
+            payload = await response.json();
+          } catch (error) {
+            payload = { error: await response.text() };
+          }
+
+          if (!response.ok) {
+            throw new Error(payload.error || "Transcription failed.");
+          }
+
+          transcriptEl.value = payload.text || "";
+          if (payload.text) {
+            setStatus("Transcription complete.");
+            copyButton.disabled = false;
+          } else {
+            setStatus("No transcript returned. Please try again.", true);
+          }
+        } catch (error) {
+          setStatus(error.message, true);
+        } finally {
+          transcribeButton.disabled = false;
+        }
+      });
+
+      copyButton.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(transcriptEl.value);
+          setStatus("Transcript copied to clipboard.");
+        } catch (error) {
+          setStatus("Unable to copy transcript. Please copy manually.", true);
+        }
+      });
+    </script>
+  </body>
+</html>
