@@ -1,9 +1,17 @@
 const Busboy = require("busboy");
+const FormData = require("form-data");
 const { Readable } = require("stream");
 
 const parseMultipart = (event) =>
   new Promise((resolve, reject) => {
-    const busboy = Busboy({ headers: event.headers });
+    const contentType =
+      event.headers["content-type"] || event.headers["Content-Type"];
+    if (!contentType) {
+      reject(new Error("Missing Content-Type header."));
+      return;
+    }
+
+    const busboy = Busboy({ headers: { "content-type": contentType } });
     let fileBuffer = Buffer.alloc(0);
     let filename = "";
     let mimeType = "";
@@ -55,8 +63,10 @@ exports.handler = async (event) => {
     const { fileBuffer, filename, mimeType } = await parseMultipart(event);
 
     const formData = new FormData();
-    const blob = new Blob([fileBuffer], { type: mimeType });
-    formData.append("file", blob, filename);
+    formData.append("file", fileBuffer, {
+      filename,
+      contentType: mimeType,
+    });
     formData.append("model", "whisper-1");
 
     const response = await fetch(
@@ -65,6 +75,7 @@ exports.handler = async (event) => {
         method: "POST",
         headers: {
           Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          ...formData.getHeaders(),
         },
         body: formData,
       }

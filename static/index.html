@@ -165,7 +165,12 @@
             method: "POST",
             body: formData,
           });
-          const payload = await response.json();
+          let payload = {};
+          try {
+            payload = await response.json();
+          } catch (error) {
+            payload = { error: await response.text() };
+          }
 
           if (!response.ok) {
             throw new Error(payload.error || "Transcription failed.");
