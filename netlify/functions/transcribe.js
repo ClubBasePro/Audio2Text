@@ -1,9 +1,10 @@
 const Busboy = require("busboy");
-const FormData = require("form-data");
 const { Readable } = require("stream");
-const fetchImpl = require("node-fetch");
+const fetchImpl = global.fetch;
 
-const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
+if (!fetchImpl) {
+  throw new Error("Fetch API is not available in this runtime.");
+}
 
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 
@@ -104,11 +105,10 @@ exports.handler = async (event) => {
       await parseMultipart(event);
 
     const formData = new FormData();
-    formData.append("file", fileBuffer, {
-      filename,
-      contentType: mimeType,
-      knownLength: fileBuffer.length,
+    const fileBlob = new Blob([fileBuffer], {
+      type: mimeType || "application/octet-stream",
     });
+    formData.append("file", fileBlob, filename);
     formData.append("model", "whisper-1");
     if (fields?.language) {
       formData.append("language", fields.language);
@@ -121,7 +121,6 @@ exports.handler = async (event) => {
       method: "POST",
       headers: {
         Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        ...formData.getHeaders(),
       },
       body: formData,
     };
