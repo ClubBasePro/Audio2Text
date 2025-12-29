@@ -247,12 +247,12 @@
   <body>
     <main>
       <header>
-        <div class="pill">Secure Whisper proxy via Netlify Functions</div>
+        <div class="pill">Secure Whisper proxy via Flask</div>
         <div class="hero">
           <h1>Ship your audio to Whisper and get a clean transcript back.</h1>
           <p class="subhead">
-            Upload a recording, send it through the Netlify function, and copy the transcript
-            when it returns. Works with MP3, WAV, M4A, FLAC, and more.
+            Upload a recording, send it through the Flask API, and copy the transcript when it
+            returns. Works with MP3, WAV, M4A, FLAC, and more.
           </p>
         </div>
       </header>
@@ -261,7 +261,7 @@
         <section class="card">
           <h2>Upload audio</h2>
           <p class="hint">
-            Netlify Functions cap request bodies at ~10MB. For larger files, use a different backend.
+            Audio is sent to your Flask backend, which holds the OpenAI API key.
           </p>
           <form id="transcribe-form">
             <div class="drop-zone" id="drop-zone">
@@ -343,7 +343,7 @@
             <div>
               <strong>Upload your audio.</strong>
               <p class="hint">
-                Your browser sends the file to a Netlify Function, which holds the API key.
+                Your browser sends the file to a Flask API, which holds the API key.
               </p>
             </div>
           </div>
@@ -352,7 +352,7 @@
             <div>
               <strong>Let Whisper transcribe.</strong>
               <p class="hint">
-                The function calls OpenAI Whisper and returns the transcript plus a request id.
+                The API calls OpenAI Whisper and returns the transcript.
               </p>
             </div>
           </div>
@@ -385,7 +385,7 @@
       const audioPreview = document.getElementById("audio-preview");
       const languageInput = document.getElementById("language");
       const promptInput = document.getElementById("prompt");
-      const MAX_UPLOAD_MB = 10;
+      const MAX_UPLOAD_MB = 50;
 
       const setStatus = (message, isError = false, detail = "") => {
         statusEl.textContent = message;
@@ -428,7 +428,7 @@
           statusUpload.textContent = "Waiting";
           statusRequest.textContent = "—";
           setStatus(
-            `File is too large. Netlify Functions only accept files under ${MAX_UPLOAD_MB}MB.`,
+            `File is too large. Please upload a file under ${MAX_UPLOAD_MB}MB.`,
             true
           );
           return;
@@ -494,7 +494,7 @@
         transcribeButton.disabled = true;
 
         try {
-          const response = await fetch("/.netlify/functions/transcribe", {
+          const response = await fetch("/transcribe", {
             method: "POST",
             body: formData,
           });
@@ -535,7 +535,7 @@
           setStatus(
             error.message,
             true,
-            "Check the Netlify function logs for more details."
+            "Check your server logs for more details."
           );
         } finally {
           transcribeButton.disabled = false;
