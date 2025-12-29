@@ -1,6 +1,8 @@
 const Busboy = require("busboy");
 const { Readable } = require("stream");
-const fetchImpl = global.fetch;
+const { Blob, FormData, fetch: undiciFetch } = require("undici");
+
+const fetchImpl = global.fetch ?? undiciFetch;
 
 const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
 
