@@ -1,6 +1,8 @@
 const Busboy = require("busboy");
 const { Readable } = require("stream");
-const fetchImpl = global.fetch;
+const { Blob, FormData, fetch: undiciFetch } = require("undici");
+
+const fetchImpl = global.fetch ?? undiciFetch;
 
 if (!fetchImpl) {
   throw new Error("Fetch API is not available in this runtime.");
@@ -75,9 +77,10 @@ const parseMultipart = (event) =>
       return;
     }
 
-    const body = event.isBase64Encoded
-      ? Buffer.from(event.body, "base64")
-      : Buffer.from(event.body, "utf8");
+    const body = Buffer.from(
+      event.body,
+      event.isBase64Encoded ? "base64" : "binary"
+    );
     Readable.from(body).pipe(busboy);
   });
 
@@ -129,6 +132,9 @@ exports.handler = async (event) => {
       "https://api.openai.com/v1/audio/transcriptions",
       fetchOptions
     );
+    const requestId =
+      response.headers.get("x-request-id") ||
+      response.headers.get("openai-request-id");
 
     const responseText = await response.text();
     let data = {};
@@ -146,6 +152,7 @@ exports.handler = async (event) => {
             data.error?.message ||
             responseText ||
             "Transcription failed.",
+          requestId,
         }),
       };
     }
@@ -153,7 +160,7 @@ exports.handler = async (event) => {
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: data.text || "" }),
+      body: JSON.stringify({ text: data.text || "", requestId }),
     };
   } catch (error) {
     return {
