@@ -5,7 +5,7 @@ import pathlib
 import tempfile
 
 from flask import Flask, jsonify, request, send_from_directory
-from openai import OpenAI
+from openai import APIConnectionError, APIError, APIStatusError, APITimeoutError, OpenAI
 
 app = Flask(__name__, static_folder="static", static_url_path="")
 
@@ -58,6 +58,22 @@ def transcribe() -> object:
                 transcription_params["prompt"] = prompt
             transcription = client.audio.transcriptions.create(**transcription_params)
         return jsonify({"text": transcription.text})
+    except APIStatusError as exc:
+        return (
+            jsonify(
+                {
+                    "error": exc.message,
+                    "requestId": exc.request_id,
+                }
+            ),
+            exc.status_code,
+        )
+    except APITimeoutError:
+        return jsonify({"error": "OpenAI request timed out."}), 504
+    except APIConnectionError:
+        return jsonify({"error": "Unable to reach OpenAI. Please try again."}), 502
+    except APIError as exc:
+        return jsonify({"error": exc.message}), 500
     finally:
         os.remove(temp_path)
 
