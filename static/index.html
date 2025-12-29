@@ -261,7 +261,7 @@
         <section class="card">
           <h2>Upload audio</h2>
           <p class="hint">
-            Keep files under 10MB for the fastest turnaround (Netlify function limits apply).
+            Keep files under 25MB for the fastest turnaround (Netlify function limits apply).
           </p>
           <form id="transcribe-form">
             <div class="drop-zone" id="drop-zone">
@@ -385,6 +385,7 @@
       const audioPreview = document.getElementById("audio-preview");
       const languageInput = document.getElementById("language");
       const promptInput = document.getElementById("prompt");
+      const MAX_UPLOAD_MB = 25;
 
       const setStatus = (message, isError = false, detail = "") => {
         statusEl.textContent = message;
@@ -418,6 +419,20 @@
 
       const setFile = (file) => {
         if (!file) return;
+        if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
+          audioInput.value = "";
+          fileMeta.textContent = "No file selected yet.";
+          audioPreview.src = "";
+          audioPreview.hidden = true;
+          statusFile.textContent = "No file selected";
+          statusUpload.textContent = "Waiting";
+          statusRequest.textContent = "—";
+          setStatus(
+            `File is too large. Please upload a file under ${MAX_UPLOAD_MB}MB.`,
+            true
+          );
+          return;
+        }
         const dataTransfer = new DataTransfer();
         dataTransfer.items.add(file);
         audioInput.files = dataTransfer.files;
