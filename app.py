@@ -10,6 +10,9 @@ from openai import OpenAI
 app = Flask(__name__, static_folder="static", static_url_path="")
 
 ALLOWED_EXTENSIONS = {".mp3", ".wav", ".m4a", ".flac", ".ogg"}
+DEFAULT_MAX_AUDIO_MB = 50
+MAX_AUDIO_MB = int(os.getenv("MAX_AUDIO_MB", DEFAULT_MAX_AUDIO_MB))
+app.config["MAX_CONTENT_LENGTH"] = MAX_AUDIO_MB * 1024 * 1024
 
 
 @app.get("/")
@@ -35,6 +38,9 @@ def transcribe() -> object:
             400,
         )
 
+    language = request.form.get("language", "").strip() or None
+    prompt = request.form.get("prompt", "").strip() or None
+
     client = OpenAI()
     with tempfile.NamedTemporaryFile(delete=False) as temp_file:
         audio_file.save(temp_file)
@@ -42,13 +48,31 @@ def transcribe() -> object:
 
     try:
         with open(temp_path, "rb") as handle:
-            transcription = client.audio.transcriptions.create(
-                model="whisper-1",
-                file=handle,
-            )
+            transcription_params = {
+                "model": "whisper-1",
+                "file": handle,
+            }
+            if language:
+                transcription_params["language"] = language
+            if prompt:
+                transcription_params["prompt"] = prompt
+            transcription = client.audio.transcriptions.create(**transcription_params)
         return jsonify({"text": transcription.text})
     finally:
         os.remove(temp_path)
+
+
+@app.errorhandler(413)
+def request_entity_too_large(_error: Exception) -> object:
+    return (
+        jsonify(
+            {
+                "error": "Audio file is too large.",
+                "maxSizeMb": MAX_AUDIO_MB,
+            }
+        ),
+        413,
+    )
 
 
 if __name__ == "__main__":

@@ -2,24 +2,43 @@
 
 A simple web app that lets you upload an audio file (MP3/WAV/etc.) and returns a transcript you can copy.
 
-## Deploy on Netlify
+## Run locally
 
-1. Push this repo to your Git provider and connect it to a new Netlify site.
-2. Set the environment variable `OPENAI_API_KEY` in the Netlify site settings.
-3. Build settings:
-   - Build command: *(leave empty)*
-   - Publish directory: `static`
+1. Install dependencies:
 
-Netlify will automatically deploy the static site and the serverless function at
-`/.netlify/functions/transcribe`.
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-## Local preview (optional)
+2. Set the OpenAI API key:
 
-If you have the Netlify CLI installed, you can run:
+   ```bash
+   export OPENAI_API_KEY="your-key"
+   ```
 
-```bash
-npm install
-netlify dev
-```
+3. Start the server:
 
-Then open the local URL that Netlify outputs and upload an audio file to transcribe.
+   ```bash
+   python app.py
+   ```
+
+Then open http://localhost:5000.
+
+## Deploy without Netlify
+
+This app is a simple Flask service with a static frontend. You can deploy it on any
+container-friendly platform (Render, Fly.io, Railway, DigitalOcean App Platform).
+
+### Render example
+
+1. Create a new **Web Service** from this repo.
+2. Set the environment variable `OPENAI_API_KEY`.
+3. Use the following settings:
+   - Build command: `pip install -r requirements.txt`
+   - Start command: `gunicorn app:app`
+
+### Fly.io example
+
+1. Install the Fly CLI and run `fly launch`.
+2. Set the secret: `fly secrets set OPENAI_API_KEY=your-key`.
+3. Ensure the process runs `gunicorn app:app` (or `python app.py` for quick testing).
