@@ -1,2 +1,8 @@
 [functions]
   directory = "netlify/functions"
+
+[build]
+  publish = "static"
+
+[build.environment]
+  NODE_VERSION = "18"

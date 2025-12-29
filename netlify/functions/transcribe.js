@@ -2,11 +2,7 @@ const Busboy = require("busboy");
 const { Readable } = require("stream");
 const fetchImpl = global.fetch;
 
-if (!fetchImpl) {
-  throw new Error("Fetch API is not available in this runtime.");
-}
-
-const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
+const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
 
 const parseMultipart = (event) =>
   new Promise((resolve, reject) => {
@@ -60,7 +56,7 @@ const parseMultipart = (event) =>
       if (fileBuffer.length > MAX_AUDIO_BYTES) {
         reject(
           new Error(
-            "Audio file is too large. Please upload a file under 25MB."
+            "Audio file is too large. Please upload a file under 10MB."
           )
         );
         return;
@@ -75,9 +71,13 @@ const parseMultipart = (event) =>
       return;
     }
 
-    const body = event.isBase64Encoded
-      ? Buffer.from(event.body, "base64")
-      : Buffer.from(event.body, "utf8");
+    const isMultipart = contentType.includes("multipart/form-data");
+    const bodyEncoding = event.isBase64Encoded
+      ? "base64"
+      : isMultipart
+      ? "binary"
+      : "utf8";
+    const body = Buffer.from(event.body, bodyEncoding);
     Readable.from(body).pipe(busboy);
   });
 
@@ -101,11 +101,21 @@ exports.handler = async (event) => {
   }
 
   try {
+    if (!fetchImpl || !global.FormData || !global.Blob) {
+      return {
+        statusCode: 500,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          error:
+            "Server runtime missing fetch/FormData/Blob. Ensure Netlify is using Node 18+.",
+        }),
+      };
+    }
     const { fileBuffer, filename, mimeType, fields } =
       await parseMultipart(event);
 
-    const formData = new FormData();
-    const fileBlob = new Blob([fileBuffer], {
+    const formData = new global.FormData();
+    const fileBlob = new global.Blob([fileBuffer], {
       type: mimeType || "application/octet-stream",
     });
     formData.append("file", fileBlob, filename);
@@ -129,6 +139,9 @@ exports.handler = async (event) => {
       "https://api.openai.com/v1/audio/transcriptions",
       fetchOptions
     );
+    const requestId =
+      response.headers.get("x-request-id") ||
+      response.headers.get("openai-request-id");
 
     const responseText = await response.text();
     let data = {};
@@ -146,6 +159,7 @@ exports.handler = async (event) => {
             data.error?.message ||
             responseText ||
             "Transcription failed.",
+          requestId,
         }),
       };
     }
@@ -153,7 +167,7 @@ exports.handler = async (event) => {
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: data.text || "" }),
+      body: JSON.stringify({ text: data.text || "", requestId }),
     };
   } catch (error) {
     return {
