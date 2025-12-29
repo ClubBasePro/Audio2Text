@@ -261,7 +261,7 @@
         <section class="card">
           <h2>Upload audio</h2>
           <p class="hint">
-            Keep files under 25MB for the fastest turnaround (Netlify function limits apply).
+            Netlify Functions cap request bodies at ~10MB. For larger files, use a different backend.
           </p>
           <form id="transcribe-form">
             <div class="drop-zone" id="drop-zone">
@@ -385,7 +385,7 @@
       const audioPreview = document.getElementById("audio-preview");
       const languageInput = document.getElementById("language");
       const promptInput = document.getElementById("prompt");
-      const MAX_UPLOAD_MB = 25;
+      const MAX_UPLOAD_MB = 10;
 
       const setStatus = (message, isError = false, detail = "") => {
         statusEl.textContent = message;
@@ -428,7 +428,7 @@
           statusUpload.textContent = "Waiting";
           statusRequest.textContent = "—";
           setStatus(
-            `File is too large. Please upload a file under ${MAX_UPLOAD_MB}MB.`,
+            `File is too large. Netlify Functions only accept files under ${MAX_UPLOAD_MB}MB.`,
             true
           );
           return;

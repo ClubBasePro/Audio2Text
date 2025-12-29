@@ -4,7 +4,7 @@ const { Blob, FormData, fetch: undiciFetch } = require("undici");
 
 const fetchImpl = global.fetch ?? undiciFetch;
 
-const DEFAULT_MAX_AUDIO_MB = 25;
+const DEFAULT_MAX_AUDIO_MB = 10;
 const MAX_AUDIO_BYTES = (() => {
   const configuredMb = Number(process.env.MAX_AUDIO_MB);
   const mb = Number.isFinite(configuredMb) && configuredMb > 0
@@ -127,6 +127,18 @@ exports.handler = async (event) => {
         body: JSON.stringify({
           error:
             "Server runtime missing fetch/FormData/Blob. Ensure Netlify is using Node 18+.",
+        }),
+      };
+    }
+    const contentLength = Number(event.headers?.["content-length"] || 0);
+    if (contentLength && contentLength > MAX_AUDIO_BYTES) {
+      return {
+        statusCode: 413,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          error: `Audio file exceeds ${Math.round(
+            MAX_AUDIO_BYTES / (1024 * 1024)
+          )}MB. Netlify Functions have strict request size limits; host the proxy elsewhere for larger files or lower MAX_AUDIO_MB.`,
         }),
       };
     }
