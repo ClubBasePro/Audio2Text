@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Audio2Text Whisper Transcriber</title>
+    <title>Audio2Text Whisper Studio</title>
     <style>
       :root {
         color-scheme: light;
@@ -170,6 +170,35 @@
       .status.error {
         color: #dc2626;
       }
+      .status-panel {
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        padding: 14px 16px;
+        background: #f8fafc;
+        display: grid;
+        gap: 10px;
+      }
+      .status-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        font-size: 0.92rem;
+        color: var(--muted);
+      }
+      .status-row strong {
+        color: var(--text);
+        font-weight: 600;
+        text-align: right;
+      }
+      .status-detail {
+        margin-top: 8px;
+        padding: 10px 12px;
+        background: #fff1f2;
+        border: 1px solid #fecdd3;
+        color: #b91c1c;
+        border-radius: 12px;
+        font-size: 0.92rem;
+      }
       textarea {
         width: 100%;
         min-height: 280px;
@@ -218,12 +247,12 @@
   <body>
     <main>
       <header>
-        <div class="pill">Powered by OpenAI Whisper</div>
+        <div class="pill">Secure Whisper proxy via Netlify Functions</div>
         <div class="hero">
-          <h1>Transcribe audio into crisp text in minutes.</h1>
+          <h1>Ship your audio to Whisper and get a clean transcript back.</h1>
           <p class="subhead">
-            Upload a recording, let Whisper handle the heavy lifting, and copy the transcript
-            instantly. Works with MP3, WAV, M4A, FLAC, and more.
+            Upload a recording, send it through the Netlify function, and copy the transcript
+            when it returns. Works with MP3, WAV, M4A, FLAC, and more.
           </p>
         </div>
       </header>
@@ -231,7 +260,9 @@
       <div class="grid">
         <section class="card">
           <h2>Upload audio</h2>
-          <p class="hint">Keep files under 25MB for the fastest turnaround.</p>
+          <p class="hint">
+            Keep files under 25MB for the fastest turnaround (Netlify may enforce smaller limits).
+          </p>
           <form id="transcribe-form">
             <div class="drop-zone" id="drop-zone">
               <input
@@ -276,6 +307,21 @@
               <button class="ghost" id="reset-button" type="button">Clear</button>
             </div>
             <div class="status" id="status">Ready when you are.</div>
+            <div class="status-panel">
+              <div class="status-row">
+                <span>File</span>
+                <strong id="status-file">No file selected</strong>
+              </div>
+              <div class="status-row">
+                <span>Upload</span>
+                <strong id="status-upload">Waiting</strong>
+              </div>
+              <div class="status-row">
+                <span>Whisper request</span>
+                <strong id="status-request">—</strong>
+              </div>
+            </div>
+            <div class="status-detail" id="status-detail" hidden></div>
           </form>
         </section>
 
@@ -296,14 +342,18 @@
             <span>1</span>
             <div>
               <strong>Upload your audio.</strong>
-              <p class="hint">We send your file directly to OpenAI Whisper using your Netlify environment key.</p>
+              <p class="hint">
+                Your browser sends the file to a Netlify Function, which holds the API key.
+              </p>
             </div>
           </div>
           <div class="step">
             <span>2</span>
             <div>
               <strong>Let Whisper transcribe.</strong>
-              <p class="hint">The model detects speech and returns a clean transcript.</p>
+              <p class="hint">
+                The function calls OpenAI Whisper and returns the transcript plus a request id.
+              </p>
             </div>
           </div>
           <div class="step">
@@ -326,15 +376,21 @@
       const downloadButton = document.getElementById("download-button");
       const transcribeButton = document.getElementById("transcribe-button");
       const resetButton = document.getElementById("reset-button");
+      const statusFile = document.getElementById("status-file");
+      const statusUpload = document.getElementById("status-upload");
+      const statusRequest = document.getElementById("status-request");
+      const statusDetail = document.getElementById("status-detail");
       const dropZone = document.getElementById("drop-zone");
       const fileMeta = document.getElementById("file-meta");
       const audioPreview = document.getElementById("audio-preview");
       const languageInput = document.getElementById("language");
       const promptInput = document.getElementById("prompt");
 
-      const setStatus = (message, isError = false) => {
+      const setStatus = (message, isError = false, detail = "") => {
         statusEl.textContent = message;
         statusEl.classList.toggle("error", isError);
+        statusDetail.textContent = detail;
+        statusDetail.hidden = !detail;
       };
 
       const formatBytes = (bytes) => {
@@ -354,6 +410,9 @@
         copyButton.disabled = true;
         downloadButton.disabled = true;
         transcribeButton.disabled = false;
+        statusFile.textContent = "No file selected";
+        statusUpload.textContent = "Waiting";
+        statusRequest.textContent = "—";
         setStatus("Ready when you are.");
       };
 
@@ -363,6 +422,9 @@
         dataTransfer.items.add(file);
         audioInput.files = dataTransfer.files;
         fileMeta.textContent = `${file.name} · ${formatBytes(file.size)}`;
+        statusFile.textContent = `${file.name} (${formatBytes(file.size)})`;
+        statusUpload.textContent = "Waiting";
+        statusRequest.textContent = "—";
         audioPreview.src = URL.createObjectURL(file);
         audioPreview.hidden = false;
       };
@@ -409,6 +471,8 @@
         }
 
         transcriptEl.value = "";
+        statusUpload.textContent = "Uploading";
+        statusRequest.textContent = "—";
         setStatus("Uploading audio and generating transcript...");
         copyButton.disabled = true;
         downloadButton.disabled = true;
@@ -427,20 +491,25 @@
             payload = { error: responseText };
           }
 
+          statusRequest.textContent = payload.requestId || "—";
           if (!response.ok) {
+            statusUpload.textContent = "Failed";
             throw new Error(payload.error || "Transcription failed.");
           }
 
           transcriptEl.value = payload.text || "";
           if (payload.text) {
+            statusUpload.textContent = "Complete";
             setStatus("Transcription complete.");
             copyButton.disabled = false;
             downloadButton.disabled = false;
           } else {
+            statusUpload.textContent = "No transcript";
             setStatus("No transcript returned. Please try again.", true);
           }
         } catch (error) {
-          setStatus(error.message, true);
+          statusUpload.textContent = "Failed";
+          setStatus(error.message, true, "Check the Netlify function logs for more details.");
         } finally {
           transcribeButton.disabled = false;
         }
