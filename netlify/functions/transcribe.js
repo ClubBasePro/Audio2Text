@@ -4,7 +4,14 @@ const { Blob, FormData, fetch: undiciFetch } = require("undici");
 
 const fetchImpl = global.fetch ?? undiciFetch;
 
-const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
+const DEFAULT_MAX_AUDIO_MB = 10;
+const MAX_AUDIO_BYTES = (() => {
+  const configuredMb = Number(process.env.MAX_AUDIO_MB);
+  const mb = Number.isFinite(configuredMb) && configuredMb > 0
+    ? configuredMb
+    : DEFAULT_MAX_AUDIO_MB;
+  return mb * 1024 * 1024;
+})();
 
 const parseMultipart = (event) =>
   new Promise((resolve, reject) => {
@@ -24,12 +31,16 @@ const parseMultipart = (event) =>
       return;
     }
 
-    const busboy = Busboy({ headers: { "content-type": contentType } });
+    const busboy = Busboy({
+      headers: { "content-type": contentType },
+      limits: { files: 1, fileSize: MAX_AUDIO_BYTES },
+    });
     let fileBuffer = Buffer.alloc(0);
     let filename = "";
     let mimeType = "";
     const fields = {};
     let hasFile = false;
+    let fileTooLarge = false;
 
     busboy.on("file", (_fieldname, file, info) => {
       if (hasFile) {
@@ -42,6 +53,10 @@ const parseMultipart = (event) =>
       file.on("data", (data) => {
         fileBuffer = Buffer.concat([fileBuffer, data]);
       });
+      file.on("limit", () => {
+        fileTooLarge = true;
+        file.resume();
+      });
     });
 
     busboy.on("field", (fieldname, value) => {
@@ -51,16 +66,18 @@ const parseMultipart = (event) =>
     });
 
     busboy.on("finish", () => {
-      if (!fileBuffer.length) {
-        reject(new Error("No audio file provided."));
-        return;
-      }
-      if (fileBuffer.length > MAX_AUDIO_BYTES) {
+      if (fileTooLarge) {
         reject(
           new Error(
-            "Audio file is too large. Please upload a file under 10MB."
+            `Audio file is too large. Please upload a file under ${Math.round(
+              MAX_AUDIO_BYTES / (1024 * 1024)
+            )}MB.`
           )
         );
+        return;
+      }
+      if (!fileBuffer.length) {
+        reject(new Error("No audio file provided."));
         return;
       }
       resolve({ fileBuffer, filename, mimeType, fields });
@@ -110,6 +127,18 @@ exports.handler = async (event) => {
         body: JSON.stringify({
           error:
             "Server runtime missing fetch/FormData/Blob. Ensure Netlify is using Node 18+.",
+        }),
+      };
+    }
+    const contentLength = Number(event.headers?.["content-length"] || 0);
+    if (contentLength && contentLength > MAX_AUDIO_BYTES) {
+      return {
+        statusCode: 413,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          error: `Audio file exceeds ${Math.round(
+            MAX_AUDIO_BYTES / (1024 * 1024)
+          )}MB. Netlify Functions have strict request size limits; host the proxy elsewhere for larger files or lower MAX_AUDIO_MB.`,
         }),
       };
     }
