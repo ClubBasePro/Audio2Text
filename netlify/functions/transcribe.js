@@ -4,10 +4,6 @@ const { Blob, FormData, fetch: undiciFetch } = require("undici");
 
 const fetchImpl = global.fetch ?? undiciFetch;
 
-if (!fetchImpl) {
-  throw new Error("Fetch API is not available in this runtime.");
-}
-
 const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
 
 const parseMultipart = (event) =>
@@ -107,11 +103,21 @@ exports.handler = async (event) => {
   }
 
   try {
+    if (!fetchImpl || !global.FormData || !global.Blob) {
+      return {
+        statusCode: 500,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          error:
+            "Server runtime missing fetch/FormData/Blob. Ensure Netlify is using Node 18+.",
+        }),
+      };
+    }
     const { fileBuffer, filename, mimeType, fields } =
       await parseMultipart(event);
 
-    const formData = new FormData();
-    const fileBlob = new Blob([fileBuffer], {
+    const formData = new global.FormData();
+    const fileBlob = new global.Blob([fileBuffer], {
       type: mimeType || "application/octet-stream",
     });
     formData.append("file", fileBlob, filename);

@@ -3,3 +3,6 @@
 
 [build]
   publish = "static"
+
+[build.environment]
+  NODE_VERSION = "18"
