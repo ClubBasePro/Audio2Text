@@ -8,7 +8,7 @@ if (!fetchImpl) {
   throw new Error("Fetch API is not available in this runtime.");
 }
 
-const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
+const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
 
 const parseMultipart = (event) =>
   new Promise((resolve, reject) => {
@@ -62,7 +62,7 @@ const parseMultipart = (event) =>
       if (fileBuffer.length > MAX_AUDIO_BYTES) {
         reject(
           new Error(
-            "Audio file is too large. Please upload a file under 25MB."
+            "Audio file is too large. Please upload a file under 10MB."
           )
         );
         return;
@@ -77,10 +77,13 @@ const parseMultipart = (event) =>
       return;
     }
 
-    const body = Buffer.from(
-      event.body,
-      event.isBase64Encoded ? "base64" : "binary"
-    );
+    const isMultipart = contentType.includes("multipart/form-data");
+    const bodyEncoding = event.isBase64Encoded
+      ? "base64"
+      : isMultipart
+      ? "binary"
+      : "utf8";
+    const body = Buffer.from(event.body, bodyEncoding);
     Readable.from(body).pipe(busboy);
   });
 

@@ -261,7 +261,7 @@
         <section class="card">
           <h2>Upload audio</h2>
           <p class="hint">
-            Keep files under 25MB for the fastest turnaround (Netlify may enforce smaller limits).
+            Keep files under 10MB for the fastest turnaround (Netlify function limits apply).
           </p>
           <form id="transcribe-form">
             <div class="drop-zone" id="drop-zone">
@@ -491,10 +491,18 @@
             payload = { error: responseText };
           }
 
-          statusRequest.textContent = payload.requestId || "—";
+          const requestId = payload.requestId || "—";
+          statusRequest.textContent = requestId;
           if (!response.ok) {
             statusUpload.textContent = "Failed";
-            throw new Error(payload.error || "Transcription failed.");
+            const detailMessage = [
+              payload.error || "Transcription failed.",
+              requestId !== "—" ? `Request ID: ${requestId}` : "",
+              `Status: ${response.status}`,
+            ]
+              .filter(Boolean)
+              .join(" • ");
+            throw new Error(detailMessage);
           }
 
           transcriptEl.value = payload.text || "";
@@ -509,7 +517,11 @@
           }
         } catch (error) {
           statusUpload.textContent = "Failed";
-          setStatus(error.message, true, "Check the Netlify function logs for more details.");
+          setStatus(
+            error.message,
+            true,
+            "Check the Netlify function logs for more details."
+          );
         } finally {
           transcribeButton.disabled = false;
         }
